@@ -1,0 +1,19 @@
+body {
+  margin: 0;
+  background: #0e1e2a;
+  color: #e8f0ee;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input {
+  font-family: inherit;
+}

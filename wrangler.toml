@@ -1,0 +1,15 @@
+name = "kinetic"
+main = "worker/index.ts"
+compatibility_date = "2026-08-24"
+
+# Serves the Vite build output; the Worker only runs for requests that don't
+# match a built asset (see run_worker_first), i.e. our /api/* routes, and the
+# SPA fallback lets client-side routing work for unknown paths.
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+run_worker_first = true
+not_found_handling = "single-page-application"
+
+[dev]
+port = 8788

@@ -1,0 +1,23 @@
+node_modules
+dist
+dev-dist
+coverage
+*.tsbuildinfo
+
+# Cloudflare
+.wrangler
+.dev.vars
+.dev.vars.*
+
+# Editors / OS
+.DS_Store
+*.local
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Logs
+npm-debug.log*
+pnpm-debug.log*

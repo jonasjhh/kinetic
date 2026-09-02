@@ -1,0 +1,7 @@
+# Marks this directory as its own pnpm workspace root, so `pnpm install`
+# run here stays fully separate from the medisc repo root's workspace
+# (which has no `packages:` glob and would otherwise silently exclude
+# this nested package.json instead of installing it standalone).
+allowBuilds:
+  esbuild: true
+  workerd: true

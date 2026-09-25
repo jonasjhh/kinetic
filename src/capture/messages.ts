@@ -49,7 +49,6 @@ export type CaptureEvent =
   | { type: "health"; health: CaptureHealth }
   | { type: "overlay"; blobs: OverlayBlob[] }
   | { type: "armed" } // background model warmed up; throws will be seen
-  | { type: "passDetected"; id: number }
   | { type: "markerCheck"; result: MarkerCheck }
   | { type: "brightness"; requestId: number; meanLuma: number }
   | { type: "error"; message: string };

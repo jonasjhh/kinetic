@@ -8,6 +8,7 @@ export interface Candidate {
   major: number;
   minor: number;
   count: number;
+  contrast: number; // mean signed difference from the background
   border: boolean; // touches the image edge, so only partly visible
 }
 
@@ -19,6 +20,7 @@ export interface TrackPoint {
   d: number; // diameter estimate (minor axis, or major axis at the border)
   major: number;
   border: boolean;
+  contrast: number;
 }
 
 /** A confirmed disc pass: a straight, disc-sized, disc-fast track. */

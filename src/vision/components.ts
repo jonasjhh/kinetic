@@ -16,6 +16,8 @@ export interface BlobStats {
   maxY: number;
   // Pixels of this blob that are also set in the optional `aux` mask.
   auxCount: number;
+  // Sum of the optional per-pixel `values` over the blob.
+  valueSum: number;
   // Index of the pixel the flood fill started from (any blob pixel).
   start: number;
 }
@@ -44,7 +46,12 @@ export function findBlobs(
   width: number,
   height: number,
   buffers: LabelBuffers,
-  options: { minPixels: number; aux?: Uint8Array; rect?: Rect },
+  options: {
+    minPixels: number;
+    aux?: Uint8Array;
+    values?: Float32Array;
+    rect?: Rect;
+  },
 ): BlobStats[] {
   const rect = options.rect ?? {
     x0: 0,
@@ -54,6 +61,7 @@ export function findBlobs(
   };
   const { visited, stack } = buffers;
   const aux = options.aux;
+  const values = options.values;
 
   for (let y = rect.y0; y <= rect.y1; y++) {
     visited.fill(0, y * width + rect.x0, y * width + rect.x1 + 1);
@@ -77,6 +85,7 @@ export function findBlobs(
         minY: sy,
         maxY: sy,
         auxCount: 0,
+        valueSum: 0,
         start,
       };
       let top = 0;
@@ -99,6 +108,7 @@ export function findBlobs(
         if (y < blob.minY) blob.minY = y;
         if (y > blob.maxY) blob.maxY = y;
         if (aux && aux[idx]) blob.auxCount++;
+        if (values) blob.valueSum += values[idx];
 
         const nx0 = x > rect.x0 ? x - 1 : x;
         const nx1 = x < rect.x1 ? x + 1 : x;

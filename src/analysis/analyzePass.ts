@@ -22,6 +22,10 @@ const MAX_MEDIAN_FRAMES = 15;
 const MIN_PLAUSIBLE_MPS = 2;
 const MAX_PLAUSIBLE_MPS = 60;
 const BORDER_WEIGHT = 0.3;
+// Acceptance: enough frames with the disc measured at full resolution.
+const MIN_SAMPLES = 3;
+const MIN_FULL_FRAMES = 2;
+const MAX_RESIDUAL_M = 0.08;
 
 interface FrameMeasurement {
   t: number; // seconds
@@ -78,6 +82,7 @@ export function analyzePass(
   };
 
   const measured: FrameMeasurement[] = [];
+  let missing = 0;
   frames.forEach((frame, i) => {
     const t = times[i];
     const x = trackX.intercept + trackX.slope * t;
@@ -94,7 +99,21 @@ export function analyzePass(
       buffers,
     );
     if (m) measured.push({ t, data: frame.data, m });
+    const fullyInView =
+      x >= r && y >= r && x <= width - 1 - r && y <= height - 1 - r;
+    const nearPath = m && Math.hypot(m.cx - x, m.cy - y) < 0.5 * seedDiameter;
+    if (fullyInView && !nearPath) missing++;
   });
+
+  // Continuity: wherever the fitted path puts the disc fully in view, it
+  // must actually be there. A disc can't vanish mid-flight; a chance
+  // alignment of unrelated blobs has nothing before or after it.
+  if (missing > 0) {
+    return {
+      ok: false,
+      reason: "The object vanished mid-flight — not a disc.",
+    };
+  }
 
   let full = measured.filter((f) => !f.m.border);
   full = rejectSizeOutliers(full);
@@ -135,7 +154,7 @@ export function analyzePass(
       });
     }
   }
-  if (samples.length < 2) {
+  if (samples.length < MIN_SAMPLES || full.length < MIN_FULL_FRAMES) {
     return {
       ok: false,
       reason: "The disc wasn't clearly visible in enough frames.",
@@ -156,6 +175,12 @@ export function analyzePass(
       ok: false,
       reason: `Implausible speed (${fit.speedMps.toFixed(1)} m/s) — probably not a disc.`,
     };
+  }
+
+  // A disc flies a straight line over a pass this short; centres that
+  // scatter around the fitted line were not one object.
+  if (fit.rmsResidualM > MAX_RESIDUAL_M) {
+    return { ok: false, reason: "Not a straight flight path." };
   }
 
   let confidence: Confidence;

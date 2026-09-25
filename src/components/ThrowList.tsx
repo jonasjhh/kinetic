@@ -19,7 +19,7 @@ export function ThrowList({
           {throws.length} throw{throws.length === 1 ? "" : "s"}
         </h2>
         <button style={pillButton} onClick={onSaveLast}>
-          Save last pass
+          Save last detection
         </button>
       </div>
       {throws.map((t, i) => (
@@ -33,10 +33,7 @@ export function ThrowList({
 }
 
 function renderOutcome(t: ThrowRecord, formatSpeed: (mps: number) => string) {
-  const o = t.outcome;
-  if (!o) return <span style={styles.sub}>Analysing…</span>;
-  if (!o.ok)
-    return <span style={styles.failed}>Not measured — {o.reason}</span>;
+  const o = t.result;
   return (
     <>
       <div style={styles.main}>
@@ -92,5 +89,4 @@ const styles: Record<string, React.CSSProperties> = {
   spin: { fontSize: "1rem", fontWeight: 600, color: colors.text },
   sub: { color: colors.muted, fontSize: "0.8rem", marginTop: "0.15rem" },
   note: { color: colors.warn, fontSize: "0.78rem", marginTop: "0.2rem" },
-  failed: { color: colors.muted, fontSize: "0.85rem" },
 };

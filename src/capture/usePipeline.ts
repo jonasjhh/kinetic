@@ -41,13 +41,11 @@ export function usePipeline({
   track,
   videoRef,
   analysisConfig,
-  onPassDetected,
   onResult,
 }: {
   track: MediaStreamTrack | null;
   videoRef: React.RefObject<HTMLVideoElement>;
   analysisConfig: AnalysisConfig;
-  onPassDetected: (id: number) => void;
   onResult: (id: number, outcome: PassOutcome) => void;
 }): Pipeline {
   const [health, setHealth] = useState<CaptureHealth | null>(null);
@@ -56,8 +54,8 @@ export function usePipeline({
   const [error, setError] = useState<string | null>(null);
 
   const workersRef = useRef<Workers | null>(null);
-  const callbacks = useRef({ onPassDetected, onResult });
-  callbacks.current = { onPassDetected, onResult };
+  const callbacks = useRef({ onResult });
+  callbacks.current = { onResult };
   const configRef = useRef(analysisConfig);
   configRef.current = analysisConfig;
 
@@ -91,9 +89,6 @@ export function usePipeline({
           break;
         case "armed":
           setArmedReady(true);
-          break;
-        case "passDetected":
-          callbacks.current.onPassDetected(msg.id);
           break;
         case "markerCheck":
           pending.current.marker.shift()?.(msg.result);

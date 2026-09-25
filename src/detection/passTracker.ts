@@ -22,17 +22,43 @@ export function trackerConfigFor(
 }
 
 const MAX_MISSES = 1;
+// A real pass is seen in several frames; two random blobs a plausible
+// distance apart are common in a noisy picture, three in a line are not.
+const MIN_POINTS = 3;
+// Once a track has a velocity, the next blob must land close to where it
+// predicts — loose gates let random blobs extend random tracks.
+const GATE_DIAMETERS = 0.6;
+const GATE_STEP_FRACTION = 0.15;
+// A disc flies across the view, so its track comes from an image edge and
+// leaves towards one: extrapolated this many frames beyond its first and
+// last detection, the line must reach within one diameter of the edge.
+const EDGE_EXTRAPOLATION_FRAMES = 1.5;
+// ...and its detections cover a good part of its path across the image
+// (the chord through the image along the track). Short chains of random
+// blobs, fast or slow, don't.
+const MIN_CHORD_FRACTION = 0.4;
 const MAX_TRACK_POINTS = 40;
 const SIZE_RATIO_MIN = 0.65;
 const SIZE_RATIO_MAX = 1.55;
-const ACCEPT_SIZE_SPREAD = 1.6;
-const ACCEPT_MAX_RMS_DIAMETERS = 0.35;
+// A disc looks the same in every frame of its pass: consistently darker
+// (or lighter) than the sky by a similar amount. Random blobs flip sign
+// and vary in strength.
+const CONTRAST_RATIO_MIN = 0.6;
+const CONTRAST_RATIO_MAX = 1 / CONTRAST_RATIO_MIN;
+// The disc's width across its motion doesn't change with blur and its
+// height barely changes during a pass.
+const ACCEPT_SIZE_SPREAD = 1.3;
+// A disc against the sky is seen in every frame while it's in view; the
+// miss tolerance above is for a single bad frame, not a habit.
+const MAX_GAPS_PER_TRACK = 1;
+const ACCEPT_MAX_RMS_DIAMETERS = 0.25;
 const ACCEPT_MIN_NET_DIAMETERS = 0.8;
 
 interface Track {
   points: TrackPoint[];
   misses: number;
   diameter: number;
+  contrast: number;
 }
 
 function candidateDiameter(c: Candidate): number {
@@ -55,9 +81,13 @@ export class PassTracker {
   private tracks: Track[] = [];
   private lastEmittedFrame = -1;
   private config: TrackerConfig;
+  private readonly width: number;
+  private readonly height: number;
 
-  constructor(config: TrackerConfig) {
+  constructor(config: TrackerConfig, width: number, height: number) {
     this.config = config;
+    this.width = width;
+    this.height = height;
   }
 
   setConfig(config: TrackerConfig): void {
@@ -83,13 +113,20 @@ export class PassTracker {
           const ratio = cd / track.diameter;
           if (ratio < SIZE_RATIO_MIN || ratio > SIZE_RATIO_MAX) return;
         }
+        const contrastRatio = c.contrast / track.contrast;
+        if (
+          !(contrastRatio >= CONTRAST_RATIO_MIN) ||
+          contrastRatio > CONTRAST_RATIO_MAX
+        ) {
+          return;
+        }
         if (velocity) {
           const px = last.x + velocity.vx * dt;
           const py = last.y + velocity.vy * dt;
           const err = Math.hypot(c.x - px, c.y - py);
           const gate = Math.max(
-            0.8 * track.diameter,
-            0.35 * Math.hypot(velocity.vx, velocity.vy) * dt,
+            GATE_DIAMETERS * track.diameter,
+            GATE_STEP_FRACTION * Math.hypot(velocity.vx, velocity.vy) * dt,
           );
           if (err > gate) return;
           pairs.push({ track: ti, candidate: ci, cost: err / gate });
@@ -120,6 +157,7 @@ export class PassTracker {
       track.points.push(toPoint(frame, t, candidates[pair.candidate]));
       track.misses = 0;
       track.diameter = trackDiameter(track.points);
+      track.contrast = median(track.points.map((p) => p.contrast));
     }
 
     const finished: PassDetection[] = [];
@@ -145,15 +183,45 @@ export class PassTracker {
         points: [toPoint(frame, t, c)],
         misses: 0,
         diameter: candidateDiameter(c),
+        contrast: c.contrast,
       });
     });
     this.tracks = surviving;
     return finished;
   }
 
+  private nearEdge(x: number, y: number, margin: number): boolean {
+    return (
+      x < margin ||
+      y < margin ||
+      x > this.width - 1 - margin ||
+      y > this.height - 1 - margin
+    );
+  }
+
+  /** Length of the line through (x, y) along (dx, dy) inside the image. */
+  private chordLength(x: number, y: number, dx: number, dy: number): number {
+    let lo = -Infinity;
+    let hi = Infinity;
+    const clip = (p: number, d: number, max: number) => {
+      if (Math.abs(d) < 1e-9) return;
+      const a = (0 - p) / d;
+      const b = (max - p) / d;
+      lo = Math.max(lo, Math.min(a, b));
+      hi = Math.min(hi, Math.max(a, b));
+    };
+    clip(x, dx, this.width - 1);
+    clip(y, dy, this.height - 1);
+    const len = Math.hypot(dx, dy);
+    return hi > lo && Number.isFinite(hi - lo) ? (hi - lo) * len : 0;
+  }
+
   private evaluate(track: Track): PassDetection | null {
     const points = track.points;
-    if (points.length < 2) return null;
+    if (points.length < MIN_POINTS) return null;
+    const gaps =
+      points[points.length - 1].frame - points[0].frame + 1 - points.length;
+    if (gaps > MAX_GAPS_PER_TRACK) return null;
     const full = points.filter((p) => !p.border);
     if (full.length === 0) return null;
 
@@ -184,10 +252,30 @@ export class PassTracker {
     const net = Math.hypot(last.x - first.x, last.y - first.y);
     if (net < ACCEPT_MIN_NET_DIAMETERS * diameter) return null;
 
-    if (points.length >= 3) {
-      const rms = Math.hypot(fx.rms, fy.rms);
-      if (rms > ACCEPT_MAX_RMS_DIAMETERS * diameter) return null;
-    }
+    const rms = Math.hypot(fx.rms, fy.rms);
+    if (rms > ACCEPT_MAX_RMS_DIAMETERS * diameter) return null;
+
+    const frameDt = minPositiveStep(t);
+    const reachesEdge = (time: number) =>
+      this.nearEdge(
+        fx.intercept + fx.slope * time,
+        fy.intercept + fy.slope * time,
+        diameter,
+      );
+    const entered =
+      first.border ||
+      reachesEdge(first.t - EDGE_EXTRAPOLATION_FRAMES * frameDt);
+    const left =
+      last.border || reachesEdge(last.t + EDGE_EXTRAPOLATION_FRAMES * frameDt);
+    if (!entered || !left) return null;
+
+    const chord = this.chordLength(
+      (first.x + last.x) / 2,
+      (first.y + last.y) / 2,
+      fx.slope,
+      fy.slope,
+    );
+    if (net < MIN_CHORD_FRACTION * chord) return null;
 
     return {
       points,
@@ -199,6 +287,15 @@ export class PassTracker {
   }
 }
 
+function minPositiveStep(t: number[]): number {
+  let step = Infinity;
+  for (let i = 1; i < t.length; i++) {
+    const d = t[i] - t[i - 1];
+    if (d > 0 && d < step) step = d;
+  }
+  return Number.isFinite(step) ? step : 0;
+}
+
 function toPoint(frame: number, t: number, c: Candidate): TrackPoint {
   return {
     frame,
@@ -208,6 +305,7 @@ function toPoint(frame: number, t: number, c: Candidate): TrackPoint {
     d: candidateDiameter(c),
     major: c.major,
     border: c.border,
+    contrast: c.contrast,
   };
 }
 

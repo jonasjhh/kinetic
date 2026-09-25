@@ -2,7 +2,7 @@
 // so this is the only way to talk to the user. The AudioContext has to be
 // created from a user gesture, hence unlock() on the Start button.
 
-export type Cue = "tick" | "ready" | "measured" | "unmeasured" | "warning";
+export type Cue = "tick" | "ready" | "measured" | "warning";
 
 const CUES: Record<Cue, { freq: number; ms: number }[]> = {
   tick: [{ freq: 880, ms: 70 }],
@@ -11,10 +11,6 @@ const CUES: Record<Cue, { freq: number; ms: number }[]> = {
     { freq: 990, ms: 180 },
   ],
   measured: [{ freq: 1320, ms: 140 }],
-  unmeasured: [
-    { freq: 330, ms: 120 },
-    { freq: 330, ms: 120 },
-  ],
   warning: [{ freq: 220, ms: 450 }],
 };
 
@@ -22,7 +18,6 @@ const VIBRATION: Record<Cue, number[]> = {
   tick: [30],
   ready: [60, 60, 60],
   measured: [120],
-  unmeasured: [60, 80, 60],
   warning: [400],
 };
 

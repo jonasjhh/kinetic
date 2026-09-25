@@ -249,7 +249,11 @@ function ensureGeometry(rawWidth: number, rawHeight: number): Geometry {
     det: new Uint8Array(detWidth * detHeight),
     ring: new FrameRing(width, height, RING_CAPACITY),
     detector: new MotionDetector(detWidth, detHeight),
-    tracker: new PassTracker(trackerConfigFor(discDiameterM)),
+    tracker: new PassTracker(
+      trackerConfigFor(discDiameterM),
+      detWidth,
+      detHeight,
+    ),
   };
   armedAnnounced = false;
   return geometry;
@@ -271,7 +275,6 @@ function emitPass(g: Geometry, pass: Parameters<typeof buildPassPayload>[1]) {
   ];
   const request: AnalyzeRequest = { type: "analyze", payload };
   analysisPort.postMessage(request, transfer);
-  post({ type: "passDetected", id });
 }
 
 function framePeriodUs(): number | null {

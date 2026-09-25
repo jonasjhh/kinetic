@@ -28,7 +28,8 @@ the ground, camera up, and the disc flies over it. Android (Chrome) first.
     pnpm test
 
 The tests render synthetic throws and run them through the full pipeline.
-Real passes saved from the app ("Save last pass") can go in `recordings/`
+Real passes saved from the app ("Save last detection", which also keeps
+rejected ones) can go in `recordings/`
 and are replayed through the analysis as well.
 
 Frontend + integrations for phone sensors and camera. Extracted from the

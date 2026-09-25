@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AnalysisConfig, PassOutcome } from "../analysis/types";
+import type {
+  AnalysisConfig,
+  PassOutcome,
+  PassResult,
+} from "../analysis/types";
 import {
   lockForScanning,
   unlockControls,
@@ -17,7 +21,7 @@ export type ScanPhase = "idle" | "countdown" | "locking" | "warming" | "ready";
 export interface ThrowRecord {
   id: number;
   at: number;
-  outcome: PassOutcome | null; // null while being analysed
+  result: PassResult;
 }
 
 const COUNTDOWN_S = 5;
@@ -56,22 +60,14 @@ export function useScanSession({
     [settings.discDiameterMm, settings.fovLongSideDeg, settings.throwType],
   );
 
-  const onPassDetected = useCallback((id: number) => {
-    setThrows((prev) => [...prev, { id, at: Date.now(), outcome: null }]);
-  }, []);
-
+  // Only measured throws are reported. A detection the analysis rejects
+  // (noise, a bird, a chance alignment) is dropped silently.
   const onResult = useCallback(
     (id: number, outcome: PassOutcome) => {
-      setThrows((prev) =>
-        prev.map((t) => (t.id === id ? { ...t, outcome } : t)),
-      );
-      if (outcome.ok) {
-        feedback.cue("measured");
-        feedback.say(spokenResult(outcome, settingsRef.current.speedUnit));
-      } else {
-        feedback.cue("unmeasured");
-        feedback.say("Throw seen, but not measured.");
-      }
+      if (!outcome.ok) return;
+      setThrows((prev) => [...prev, { id, at: Date.now(), result: outcome }]);
+      feedback.cue("measured");
+      feedback.say(spokenResult(outcome, settingsRef.current.speedUnit));
     },
     [feedback],
   );
@@ -80,7 +76,6 @@ export function useScanSession({
     track,
     videoRef,
     analysisConfig,
-    onPassDetected,
     onResult,
   });
 

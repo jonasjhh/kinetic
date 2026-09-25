@@ -26,6 +26,17 @@ export interface SceneConfig {
     vu: number; // px/s
     vv: number;
   } | null;
+  // Things a phone lying still still sees: frame-to-frame brightness
+  // jitter, rolling light-flicker bands, and small twinkling specks
+  // (sensor noise clusters, leaves, insects).
+  clutter: {
+    gainJitter: number; // ± fraction per frame
+    bandAmplitude: number; // ± fraction
+    bandPeriodPx: number;
+    bandSpeedPxPerS: number;
+    specksPerFrame: number;
+    speckSizePx: number;
+  } | null;
 }
 
 export function defaultScene(
@@ -46,6 +57,7 @@ export function defaultScene(
     noise: 3,
     seed: 1,
     distractor: null,
+    clutter: null,
     ...overrides,
   };
 }
@@ -153,6 +165,31 @@ export class SceneRenderer {
       for (let y = Math.max(0, v0); y < Math.min(height, v0 + d.h); y++) {
         for (let x = Math.max(0, u0); x < Math.min(width, u0 + d.w); x++) {
           out[y * width + x] = 45 + 10 * Math.sin(x / 5);
+        }
+      }
+    }
+
+    if (c.clutter) {
+      const k = c.clutter;
+      const gain = 1 + (this.random() * 2 - 1) * k.gainJitter;
+      for (let y = 0; y < height; y++) {
+        const band =
+          1 +
+          k.bandAmplitude *
+            Math.sin(
+              (2 * Math.PI * (y - k.bandSpeedPxPerS * t)) / k.bandPeriodPx,
+            );
+        const row = y * width;
+        for (let x = 0; x < width; x++) out[row + x] *= gain * band;
+      }
+      for (let n = 0; n < k.specksPerFrame; n++) {
+        const u0 = Math.floor(this.random() * (width - k.speckSizePx));
+        const v0 = Math.floor(this.random() * (height - k.speckSizePx));
+        const delta =
+          (this.random() < 0.5 ? -1 : 1) * (30 + 50 * this.random());
+        for (let y = v0; y < v0 + k.speckSizePx; y++) {
+          for (let x = u0; x < u0 + k.speckSizePx; x++)
+            out[y * width + x] += delta;
         }
       }
     }

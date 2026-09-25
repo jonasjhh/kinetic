@@ -22,18 +22,25 @@ const FOREGROUND_ALPHA = 0.003;
 // background by more than SIGMA_K of its own usual variation — so pixels
 // that normally flicker (leaves, grass, cloud edges) need a much bigger
 // change than steady sky does.
-const SIGMA_K = 3.5;
+const SIGMA_K = 4;
 const MIN_SIGMA = 3;
-const MIN_DIFF = 12;
+const MIN_DIFF = 16;
 const INITIAL_VARIANCE = 36;
 
-const MIN_BLOB_PIXELS = 8;
+// A disc passing 1.5–5m up is ~10–35px across at detection resolution;
+// anything much smaller is noise, anything far bigger is not a disc.
+const MIN_BLOB_PIXELS = 20;
+const MIN_DIAMETER_PX = 4.5;
+const MAX_DIAMETER_FRACTION = 0.4; // of the image's short side
+// Motion blur stretches a disc along its path, but not endlessly: long
+// thin blobs are edges, wires or light bands.
+const MAX_ELONGATION = 5;
 // Share of a blob's pixels that also changed since the previous frame.
 // Rejects stationary foreground (someone standing in view).
 const MIN_MOVING_FRACTION = 0.25;
 // Blob pixels / area of its moment-equivalent ellipse — rejects ragged,
 // scattered blobs.
-const MIN_FILL = 0.45;
+const MIN_FILL = 0.55;
 const MAX_CANDIDATES = 40;
 
 // This much of the frame changing at once means the phone itself moved
@@ -58,6 +65,7 @@ export class MotionDetector {
   private previous: Uint8Array;
   private foreground: Uint8Array;
   private moving: Uint8Array;
+  private contrast: Float32Array; // signed difference from background
   private buffers: LabelBuffers;
   private gainHistogram = new Uint32Array(GAIN_BINS);
   private frames = 0;
@@ -72,6 +80,7 @@ export class MotionDetector {
     this.previous = new Uint8Array(n);
     this.foreground = new Uint8Array(n);
     this.moving = new Uint8Array(n);
+    this.contrast = new Float32Array(n);
     this.buffers = createLabelBuffers(n);
   }
 
@@ -85,7 +94,7 @@ export class MotionDetector {
 
   process(frame: Uint8Array): Candidate[] {
     const n = this.width * this.height;
-    const { mean, variance, previous, foreground, moving } = this;
+    const { mean, variance, previous, foreground, moving, contrast } = this;
 
     let lumaSum = 0;
     for (let i = 0; i < n; i++) lumaSum += frame[i];
@@ -121,6 +130,7 @@ export class MotionDetector {
         MIN_DIFF,
         SIGMA_K * gain * Math.sqrt(variance[i]),
       );
+      contrast[i] = value - expected;
       const isForeground = Math.abs(value - expected) > threshold ? 1 : 0;
       foreground[i] = isForeground;
       foregroundCount += isForeground;
@@ -135,6 +145,7 @@ export class MotionDetector {
     const blobs = findBlobs(foreground, this.width, this.height, this.buffers, {
       minPixels: MIN_BLOB_PIXELS,
       aux: moving,
+      values: contrast,
     });
 
     for (let i = 0; i < n; i++) {
@@ -155,7 +166,13 @@ export class MotionDetector {
     for (const blob of blobs) {
       if (blob.auxCount / blob.count < MIN_MOVING_FRACTION) continue;
       const shape = blobShape(blob);
-      if (shape.minor <= 0) continue;
+      if (shape.minor < MIN_DIAMETER_PX) continue;
+      if (
+        shape.minor >
+        MAX_DIAMETER_FRACTION * Math.min(this.width, this.height)
+      )
+        continue;
+      if (shape.major > MAX_ELONGATION * shape.minor) continue;
       const ellipseArea = (Math.PI / 4) * shape.major * shape.minor;
       if (blob.count / ellipseArea < MIN_FILL) continue;
       candidates.push({
@@ -164,6 +181,7 @@ export class MotionDetector {
         major: shape.major,
         minor: shape.minor,
         count: blob.count,
+        contrast: blob.valueSum / blob.count,
         border: touchesImageEdge(blob, this.width, this.height),
       });
     }

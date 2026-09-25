@@ -151,7 +151,6 @@ const STEPS: Step[] = [
         <ul style={{ margin: "0.4rem 0 0", paddingLeft: "1.2rem" }}>
           <li>two rising tones — ready, throw away</li>
           <li>high beep + spoken speed and spin — throw measured</li>
-          <li>low double beep — throw seen but not measured</li>
           <li>
             long low tone + message — something needs fixing (tilt, frame drops)
           </li>

@@ -1,46 +1,20 @@
 import { useEffect, useRef, useState } from "react";
+import { openCamera } from "./openCamera";
 
 export type CameraStatus = "requesting" | "ready" | "error";
 
-// Requests the rear camera at the highest frame rate the device offers —
-// a disc crossing directly overhead is only in frame for a fraction of a
-// second, so temporal resolution matters more here than image quality.
-// All constraints are "ideal" (soft) rather than hard minimums/exacts, so
-// a camera that can't hit them still gets used at whatever it can do,
-// instead of getUserMedia rejecting with OverconstrainedError.
-const PREFERRED_CONSTRAINTS: MediaStreamConstraints = {
-  audio: false,
-  video: {
-    facingMode: { ideal: "environment" },
-    width: { ideal: 1280 },
-    height: { ideal: 720 },
-    frameRate: { ideal: 60 },
-  },
-};
-
-// If the preferred constraints are still somehow rejected (unusual, but
-// constraint support varies across devices/browsers), fall back to just
-// asking for any camera at all rather than leaving the user stuck.
-const FALLBACK_CONSTRAINTS: MediaStreamConstraints = {
-  audio: false,
-  video: true,
-};
-
-async function requestCameraStream(): Promise<MediaStream> {
-  try {
-    return await navigator.mediaDevices.getUserMedia(PREFERRED_CONSTRAINTS);
-  } catch (err) {
-    if (err instanceof Error && err.name === "OverconstrainedError") {
-      return navigator.mediaDevices.getUserMedia(FALLBACK_CONSTRAINTS);
-    }
-    throw err;
-  }
+export interface CameraSettings {
+  width: number;
+  height: number;
+  frameRate: number | null;
 }
 
 export function useCamera() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [status, setStatus] = useState<CameraStatus>("requesting");
   const [error, setError] = useState<string | null>(null);
+  const [track, setTrack] = useState<MediaStreamTrack | null>(null);
+  const [settings, setSettings] = useState<CameraSettings | null>(null);
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -48,16 +22,24 @@ export function useCamera() {
 
     (async () => {
       try {
-        stream = await requestCameraStream();
+        stream = await openCamera();
         if (cancelled) {
-          for (const track of stream.getTracks()) track.stop();
+          for (const t of stream.getTracks()) t.stop();
           return;
         }
+        const videoTrack = stream.getVideoTracks()[0];
         const video = videoRef.current;
         if (video) {
           video.srcObject = stream;
-          await video.play();
+          await video.play().catch(() => {});
         }
+        const s = videoTrack.getSettings();
+        setSettings({
+          width: s.width ?? 0,
+          height: s.height ?? 0,
+          frameRate: s.frameRate ?? null,
+        });
+        setTrack(videoTrack);
         setStatus("ready");
       } catch (err) {
         if (cancelled) return;
@@ -71,10 +53,11 @@ export function useCamera() {
     return () => {
       cancelled = true;
       if (stream) {
-        for (const track of stream.getTracks()) track.stop();
+        for (const t of stream.getTracks()) t.stop();
       }
+      setTrack(null);
     };
   }, []);
 
-  return { videoRef, status, error };
+  return { videoRef, status, error, track, settings };
 }

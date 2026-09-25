@@ -1,41 +1,50 @@
 import { useState } from "react";
 import { InstallPrompt } from "./app/InstallPrompt";
-import { CalibrationScreen } from "./screens/CalibrationScreen";
 import { ScanScreen } from "./screens/ScanScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
+import { SetupGuideScreen } from "./screens/SetupGuideScreen";
+import { useSettings } from "./settings/settings";
 
-type Screen = "scan" | "settings" | "calibration";
-
-function CurrentScreen({
-  screen,
-  setScreen,
-}: {
-  screen: Screen;
-  setScreen: (screen: Screen) => void;
-}) {
-  if (screen === "settings") {
-    return (
-      <SettingsScreen
-        onBack={() => setScreen("scan")}
-        onCalibrate={() => setScreen("calibration")}
-      />
-    );
-  }
-
-  if (screen === "calibration") {
-    return <CalibrationScreen onDone={() => setScreen("settings")} />;
-  }
-
-  return <ScanScreen onOpenSettings={() => setScreen("settings")} />;
-}
+type Screen = "scan" | "settings" | "guide";
 
 export function App() {
-  const [screen, setScreen] = useState<Screen>("scan");
+  const { settings, update } = useSettings();
+  const [screen, setScreen] = useState<Screen>(() =>
+    settings.setupGuideSeen ? "scan" : "guide",
+  );
+  const [returnTo, setReturnTo] = useState<Screen>("scan");
+
+  const openGuide = (from: Screen) => {
+    setReturnTo(from);
+    setScreen("guide");
+  };
 
   return (
     <>
       <InstallPrompt />
-      <CurrentScreen screen={screen} setScreen={setScreen} />
+      {screen === "guide" && (
+        <SetupGuideScreen
+          onDone={() => {
+            update({ setupGuideSeen: true });
+            setScreen(returnTo);
+          }}
+        />
+      )}
+      {screen === "settings" && (
+        <SettingsScreen
+          settings={settings}
+          update={update}
+          onBack={() => setScreen("scan")}
+          onOpenGuide={() => openGuide("settings")}
+        />
+      )}
+      {screen === "scan" && (
+        <ScanScreen
+          settings={settings}
+          onOpenSettings={() => setScreen("settings")}
+          onOpenGuide={() => openGuide("scan")}
+        />
+      )}
     </>
   );
 }

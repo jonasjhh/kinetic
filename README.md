@@ -1,5 +1,36 @@
 # Kinetic
 
+A PWA that measures a disc golf throw's speed and spin: the phone lies on
+the ground, camera up, and the disc flies over it. Android (Chrome) first.
+
+## How it works
+
+- **Capture** (`src/capture/`): every camera frame goes, with its capture
+  timestamp, to a worker via `MediaStreamTrackProcessor` (fallback:
+  `requestVideoFrameCallback`). The last ~40 greyscale frames stay in a ring
+  buffer. Nothing pauses, so no throw is missed.
+- **Detection** (`src/detection/`): an adaptive background model with
+  exposure-gain correction finds every moving blob. A constant-velocity
+  tracker accepts only straight, disc-sized tracks moving 4–45 m/s, measured
+  in disc diameters per second, so no calibration is needed.
+- **Analysis** (`src/analysis/`, separate worker): full-resolution disc
+  silhouettes, then a blur-free diameter (width across the motion), then
+  speed from `p = (u − cu)/d`, `q = (v − cv)/d`, which are linear in time and
+  need no focal length. Spin comes from a tape marker's angle across frames,
+  resolved with a coherence search that handles aliasing.
+- **Setup** (`src/screens/SetupGuideScreen.tsx`, `src/components/SetupChecks.tsx`):
+  a guide on first launch, live checks (fps, dropped frames, camera
+  controls, level, marker), and spoken results and warnings while the phone
+  lies screen-down.
+
+## Tests
+
+    pnpm test
+
+The tests render synthetic throws and run them through the full pipeline.
+Real passes saved from the app ("Save last pass") can go in `recordings/`
+and are replayed through the analysis as well.
+
 Frontend + integrations for phone sensors and camera. Extracted from the
 `medisc` monorepo into its own repo — separate Cloudflare Worker, separate
 deploy pipeline, no shared database or identity system.

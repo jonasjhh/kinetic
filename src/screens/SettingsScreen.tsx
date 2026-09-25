@@ -1,133 +1,154 @@
 import { useState } from "react";
-import { clearCalibration, loadCalibration } from "../speed/calibration";
-import { loadDiscDiameterMm, saveDiscDiameterMm } from "../speed/settings";
+import type { ThrowType } from "../analysis/types";
+import {
+  THROW_TYPE_LABEL,
+  type Settings,
+  type SpeedUnit,
+} from "../settings/settings";
+import {
+  colors,
+  help,
+  input,
+  label,
+  linkButton,
+  page,
+  secondaryButton,
+} from "../ui/theme";
 
 export function SettingsScreen({
+  settings,
+  update,
   onBack,
-  onCalibrate,
+  onOpenGuide,
 }: {
+  settings: Settings;
+  update: (patch: Partial<Settings>) => void;
   onBack: () => void;
-  onCalibrate: () => void;
+  onOpenGuide: () => void;
 }) {
-  const [diameterMm, setDiameterMm] = useState(() =>
-    String(loadDiscDiameterMm()),
-  );
-  const [calibration, setCalibration] = useState(loadCalibration);
+  const [diameter, setDiameter] = useState(String(settings.discDiameterMm));
+  const [fov, setFov] = useState(String(settings.fovLongSideDeg));
 
-  const handleDiameterChange = (value: string) => {
-    setDiameterMm(value);
-    const parsed = Number(value);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      saveDiscDiameterMm(parsed);
-    }
-  };
+  // Keeps the raw text while typing; only in-range numbers are saved.
+  const numberField =
+    (
+      set: (v: string) => void,
+      apply: (n: number) => void,
+      min: number,
+      max: number,
+    ) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      set(e.target.value);
+      const n = Number(e.target.value);
+      if (Number.isFinite(n) && n >= min && n <= max) apply(n);
+    };
 
   return (
-    <main style={styles.main}>
-      <button style={styles.backButton} onClick={onBack}>
+    <main style={page}>
+      <button style={linkButton} onClick={onBack}>
         ← Back
       </button>
-      <h1 style={styles.h1}>Settings</h1>
+      <h1 style={{ margin: "0.5rem 0 0.5rem" }}>Settings</h1>
 
-      <label style={styles.label}>
+      <label style={label}>
+        Throw type
+        <select
+          style={input}
+          value={settings.throwType}
+          onChange={(e) => update({ throwType: e.target.value as ThrowType })}
+        >
+          {(Object.keys(THROW_TYPE_LABEL) as ThrowType[]).map((t) => (
+            <option key={t} value={t}>
+              {THROW_TYPE_LABEL[t]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p style={help}>
+        Tells the app which way the disc spins. Needed to read spin correctly
+        when the camera runs at 30 fps.
+      </p>
+
+      <label style={label}>
         Disc diameter (mm)
         <input
-          style={styles.input}
+          style={input}
           type="number"
           inputMode="decimal"
-          min={1}
-          value={diameterMm}
-          onChange={(e) => handleDiameterChange(e.target.value)}
+          value={diameter}
+          onChange={numberField(
+            setDiameter,
+            (n) => update({ discDiameterMm: n }),
+            100,
+            300,
+          )}
         />
       </label>
-      <p style={styles.help}>
-        A standard driver is about 211mm across. Used to estimate the disc's
-        distance from the camera during a scan.
+      <p style={help}>
+        The scale for every measurement — speed is proportional to it. Most
+        drivers and midranges are 211–217 mm, putters up to ~218 mm.
+      </p>
+
+      <label style={label}>
+        Speed unit
+        <select
+          style={input}
+          value={settings.speedUnit}
+          onChange={(e) => update({ speedUnit: e.target.value as SpeedUnit })}
+        >
+          <option value="kmh">km/h</option>
+          <option value="mph">mph</option>
+        </select>
+      </label>
+
+      <label
+        style={{
+          ...label,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: "0.6rem",
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={settings.voice}
+          onChange={(e) => update({ voice: e.target.checked })}
+        />
+        Speak results aloud
+      </label>
+
+      <div style={styles.divider} />
+      <h2 style={styles.h2}>Advanced</h2>
+      <label style={label}>
+        Camera field of view, long side (°)
+        <input
+          style={input}
+          type="number"
+          inputMode="decimal"
+          value={fov}
+          onChange={numberField(
+            setFov,
+            (n) => update({ fovLongSideDeg: n }),
+            30,
+            130,
+          )}
+        />
+      </label>
+      <p style={help}>
+        Only used for the small vertical part of the speed and for the height
+        readout; horizontal speed doesn't depend on it. Phone main cameras are
+        typically 65–72°.
       </p>
 
       <div style={styles.divider} />
-
-      <h2 style={styles.h2}>Camera calibration</h2>
-      <p style={styles.help}>
-        {calibration
-          ? `Calibrated — focal length ${calibration.focalLengthPx.toFixed(1)}px.`
-          : "Not calibrated yet. Calibrate once per device before scanning."}
-      </p>
-      <button style={styles.primaryButton} onClick={onCalibrate}>
-        {calibration ? "Recalibrate" : "Calibrate camera"}
+      <button style={secondaryButton} onClick={onOpenGuide}>
+        Show setup guide
       </button>
-      {calibration && (
-        <button
-          style={styles.secondaryButton}
-          onClick={() => {
-            clearCalibration();
-            setCalibration(null);
-          }}
-        >
-          Clear calibration
-        </button>
-      )}
     </main>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  main: {
-    fontFamily: "sans-serif",
-    padding: "1.5rem",
-    color: "#e8f0ee",
-    maxWidth: 480,
-    margin: "0 auto",
-  },
-  backButton: {
-    background: "none",
-    border: "none",
-    color: "#38e0c4",
-    fontSize: "1rem",
-    padding: 0,
-    marginBottom: "0.5rem",
-  },
-  h1: { margin: "0 0 1rem" },
-  h2: { margin: "0 0 0.5rem", fontSize: "1.1rem" },
-  label: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.25rem",
-    fontSize: "0.9rem",
-  },
-  input: {
-    fontSize: "1.1rem",
-    padding: "0.5rem",
-    borderRadius: 8,
-    border: "1px solid #2a4a44",
-    background: "#0e1e2a",
-    color: "#e8f0ee",
-  },
-  help: { color: "#9fb3ac", fontSize: "0.85rem", lineHeight: 1.4 },
-  divider: {
-    height: 1,
-    background: "#1e3730",
-    margin: "1.5rem 0",
-  },
-  primaryButton: {
-    width: "100%",
-    padding: "0.75rem",
-    fontSize: "1rem",
-    fontWeight: 600,
-    borderRadius: 999,
-    border: "none",
-    background: "#38e0c4",
-    color: "#0e1e2a",
-    marginTop: "0.5rem",
-  },
-  secondaryButton: {
-    width: "100%",
-    padding: "0.75rem",
-    fontSize: "0.9rem",
-    borderRadius: 999,
-    border: "1px solid #ff6b6b",
-    background: "transparent",
-    color: "#ff6b6b",
-    marginTop: "0.5rem",
-  },
+  divider: { height: 1, background: colors.divider, margin: "1.5rem 0" },
+  h2: { margin: 0, fontSize: "1.05rem" },
 };

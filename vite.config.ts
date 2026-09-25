@@ -18,11 +18,11 @@ export default defineConfig({
         id: "/",
         name: "Kinetic",
         short_name: "Kinetic",
-        description: "Disc speed radar — throw a disc over your phone.",
+        description: "Disc speed and spin — throw a disc over your phone.",
         start_url: "/",
         scope: "/",
         display: "standalone",
-        orientation: "any",
+        orientation: "portrait",
         theme_color: "#0e1e2a",
         background_color: "#0e1e2a",
         icons: [
